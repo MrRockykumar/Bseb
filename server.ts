@@ -3,6 +3,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
+import { generateDailyQuestions } from "./src/questionGenerator.js";
 
 // Load environment variables
 dotenv.config();
@@ -596,7 +597,12 @@ const OFFLINE_QUESTIONS: Record<string, any[]> = {
   ]
 };
 
-function getDynamicQuestions(subject: string, className: string, count: number, year: string): any[] {
+function getDynamicQuestions(subject: string, className: string, count: number, year: string, stream?: string): any[] {
+  // Use current date string as the rotation seed
+  const todayStr = new Date().toDateString();
+  const poolSize = Math.max(count * 2, 300);
+  const dynamicPool = generateDailyQuestions(subject, className, poolSize, todayStr, stream);
+
   const normSub = subject.toLowerCase().trim();
   let baseQuestions = OFFLINE_QUESTIONS[normSub] || [];
   
@@ -610,29 +616,23 @@ function getDynamicQuestions(subject: string, className: string, count: number, 
     }
   }
 
-  // If still empty or we need more questions, generate beautiful realistic placeholders
-  const result = [...baseQuestions];
-  let currentLength = result.length;
-  
-  while (currentLength < count) {
-    const qIndex = currentLength + 1;
-    result.push({
-      id: qIndex,
-      questionText: `Core Topic Objective Mock Question #${qIndex} for Class ${className} ${subject}\nकक्षा ${className} ${subject} के लिए प्रमुख वस्तुनिष्ठ प्रश्न #${qIndex}`,
-      options: [
-        `Fundamental Option A / प्रमुख विकल्प A`,
-        `Core Concept Option B / प्रमुख विकल्प B`,
-        `Standard Answer Option C / प्रमुख विकल्प C`,
-        `Detailed Practice Option D / प्रमुख विकल्प D`
-      ],
-      correctOption: qIndex % 4 === 1 ? "A" : qIndex % 4 === 2 ? "B" : qIndex % 4 === 3 ? "C" : "D",
-      explanation: `Solving Bihar Board previous year question patterns reveals that studying basic definitions and formulas of Class ${className} ${subject} ensures high marks. This question represents key repeat areas specifically for BSEB ${year} exams.`,
-      difficulty: qIndex % 3 === 0 ? "Hard" : qIndex % 3 === 1 ? "Easy" : "Medium"
-    });
-    currentLength++;
-  }
+  // Combine static fallback questions with our dynamic day-seeded question pool
+  const combined = [...baseQuestions];
+  dynamicPool.forEach(dq => {
+    // Avoid exact duplicate question text
+    if (!combined.some(bq => bq.questionText.trim() === dq.questionText.trim())) {
+      combined.push(dq);
+    }
+  });
 
-  return result.slice(0, count);
+  // Re-index all questions to be sequentially numbered
+  const indexed = combined.map((q, idx) => ({
+    ...q,
+    id: idx + 1
+  }));
+
+  // Return the requested quantity (which can now easily be 200+)
+  return indexed.slice(0, count);
 }
 
 function generateOfflineTest(className: string, stream: string, subject: string, numQuestions: number, year: string) {
@@ -679,7 +679,7 @@ function generateOfflineTest(className: string, stream: string, subject: string,
 
     if (questions.length < numQuestions) {
       const needed = numQuestions - questions.length;
-      const fallbackQs = getDynamicQuestions(subject, className, needed, year);
+      const fallbackQs = getDynamicQuestions(subject, className, needed, year, stream);
       fallbackQs.forEach((q, idx) => {
         questions.push({
           ...q,
@@ -688,7 +688,7 @@ function generateOfflineTest(className: string, stream: string, subject: string,
       });
     }
   } else {
-    questions = getDynamicQuestions(subject, className, numQuestions, year);
+    questions = getDynamicQuestions(subject, className, numQuestions, year, stream);
   }
 
   return {
@@ -979,6 +979,7 @@ Format the output as a clean, highly structured JSON object. Use Hindi or Englis
 // ---------------------------------------------------------
 interface ChatMessage {
   id: string;
+  senderId: string;
   senderName: string;
   className: "10th" | "12th" | "All";
   district: string;
@@ -990,6 +991,7 @@ interface ChatMessage {
 let chatMessages: ChatMessage[] = [
   {
     id: "msg-1",
+    senderId: "system-1",
     senderName: "Sneha Kumari",
     className: "10th",
     district: "Patna (पटना)",
@@ -999,6 +1001,7 @@ let chatMessages: ChatMessage[] = [
   },
   {
     id: "msg-2",
+    senderId: "system-2",
     senderName: "Aman Raj",
     className: "12th",
     district: "Gaya (गया)",
@@ -1008,6 +1011,7 @@ let chatMessages: ChatMessage[] = [
   },
   {
     id: "msg-3",
+    senderId: "system-3",
     senderName: "Priyanshu Kumar",
     className: "12th",
     district: "Muzaffarpur (मुजफ्फरपुर)",
@@ -1017,6 +1021,7 @@ let chatMessages: ChatMessage[] = [
   },
   {
     id: "msg-4",
+    senderId: "system-4",
     senderName: "Ananya Singh",
     className: "10th",
     district: "Darbhanga (दरभंगा)",
@@ -1026,6 +1031,7 @@ let chatMessages: ChatMessage[] = [
   },
   {
     id: "msg-5",
+    senderId: "system-5",
     senderName: "Vikash Kumar",
     className: "12th",
     district: "Bhagalpur (भागलपुर)",
@@ -1042,14 +1048,15 @@ app.get("/api/chat/messages", (req: express.Request, res: express.Response) => {
 
 // POST: Add a new message to the chat
 app.post("/api/chat/messages", (req: express.Request, res: express.Response): any => {
-  const { senderName, className, district, message } = req.body;
+  const { senderId, senderName, className, district, message } = req.body;
 
-  if (!senderName || !className || !district || !message) {
+  if (!senderId || !senderName || !className || !district || !message) {
     return res.status(400).json({ error: "Missing required chat message parameters." });
   }
 
   const newMessage: ChatMessage = {
     id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    senderId: senderId.trim(),
     senderName: senderName.trim(),
     className: className,
     district: district,

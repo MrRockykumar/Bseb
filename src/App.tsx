@@ -38,11 +38,13 @@ import {
   Send,
   MessageSquare,
   Headphones,
-  X
+  X,
+  Zap
 } from "lucide-react";
 
 import { STREAMS_12TH, SUBJECTS_10TH, PRE_BAKED_QUESTIONS } from "./data";
 import { Subject, Stream, Question, MockTest, StudySchedule, SavedScheduleInput, LeaderboardEntry } from "./types";
+import { generateDailyQuestions } from "./questionGenerator";
 
 // Helper to render Lucide icon by string name
 const IconRenderer = ({ name, className }: { name: string; className?: string }) => {
@@ -204,6 +206,19 @@ export default function App() {
   // Test state
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [isConfiguringTest, setIsConfiguringTest] = useState(false);
+  const [directGenerateMode, setDirectGenerateMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("bseb_direct_generate") === "true";
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("bseb_direct_generate", String(directGenerateMode));
+    } catch (e) {}
+  }, [directGenerateMode]);
   const [numQuestions, setNumQuestions] = useState<number>(10);
   const [selectedYear, setSelectedYear] = useState<string>("2026 (New PYQ)");
   const [testLanguage, setTestLanguage] = useState<string>("Bilingual (Hindi & English)");
@@ -254,12 +269,89 @@ export default function App() {
 
   // Chatting Room state
   const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [chatNickname, setChatNickname] = useState("");
-  const [chatDistrict, setChatDistrict] = useState("Patna (पटना)");
-  const [chatClass, setChatClass] = useState<"10th" | "12th" | "All">("All");
+  const [chatUserId] = useState(() => {
+    try {
+      let id = localStorage.getItem("bseb_chat_userid");
+      if (!id) {
+        id = `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        localStorage.setItem("bseb_chat_userid", id);
+      }
+      return id;
+    } catch (e) {
+      return `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    }
+  });
+
+  const [chatNickname, setChatNickname] = useState(() => {
+    try {
+      const saved = localStorage.getItem("bseb_chat_nickname");
+      if (saved) return saved;
+    } catch (e) {}
+    const adjectives = ["Topper", "Scholar", "Warrior", "Champion", "Superb", "Bright", "Honest", "Curious"];
+    const names = ["Ankit", "Vikram", "Sneha", "Karan", "Priya", "Rahul", "Aarti", "Sumit", "Deepak", "Riya"];
+    const randAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randName = names[Math.floor(Math.random() * names.length)];
+    const randNum = Math.floor(100 + Math.random() * 900);
+    return `${randAdj} ${randName} #${randNum}`;
+  });
+
+  const [chatDistrict, setChatDistrict] = useState(() => {
+    try {
+      return localStorage.getItem("bseb_chat_district") || "Patna (पटना)";
+    } catch (e) {
+      return "Patna (पटना)";
+    }
+  });
+
+  const [chatClass, setChatClass] = useState<"10th" | "12th" | "All">(() => {
+    try {
+      return (localStorage.getItem("bseb_chat_class") as any) || "All";
+    } catch (e) {
+      return "All";
+    }
+  });
+
   const [chatNewMessage, setChatNewMessage] = useState("");
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatFilter, setChatFilter] = useState<"All" | "10th" | "12th">("All");
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Sync profile details to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("bseb_chat_nickname", chatNickname);
+    } catch (e) {}
+  }, [chatNickname]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("bseb_chat_district", chatDistrict);
+    } catch (e) {}
+  }, [chatDistrict]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("bseb_chat_class", chatClass);
+    } catch (e) {}
+  }, [chatClass]);
+
+  // Chat window auto-scroll ref
+  const chatBottomRef = React.useRef<HTMLDivElement>(null);
+
+  const scrollChatToBottom = () => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  // Scroll to bottom when messages list updates or activeTab becomes chat
+  useEffect(() => {
+    if (activeTab === "chat" && chatMessages.length > 0) {
+      // Small timeout to allow render completion
+      const timer = setTimeout(scrollChatToBottom, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [chatMessages, activeTab]);
 
   // Load and poll chat messages
   useEffect(() => {
@@ -271,9 +363,13 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           setChatMessages(data);
+          setChatError(null);
+        } else {
+          setChatError("Failed to fetch recent messages. Refreshing...");
         }
       } catch (err) {
         console.error("Error loading chat messages:", err);
+        setChatError("Network issue: Unable to connect to the topper discussion server.");
       }
     };
 
@@ -290,12 +386,14 @@ export default function App() {
 
     const sender = chatNickname.trim() || "Anonym Topper";
     setIsSendingChat(true);
+    setChatError(null);
 
     try {
       const res = await fetch("/api/chat/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          senderId: chatUserId,
           senderName: sender,
           className: chatClass,
           district: chatDistrict,
@@ -307,9 +405,14 @@ export default function App() {
         const msg = await res.json();
         setChatMessages(prev => [...prev, msg]);
         setChatNewMessage("");
+        setChatError(null);
+      } else {
+        const errData = await res.json();
+        setChatError(errData.error || "Failed to broadcast message to student group.");
       }
     } catch (err) {
       console.error("Error sending chat message:", err);
+      setChatError("Unable to post. Please verify your internet connection and try again.");
     } finally {
       setIsSendingChat(false);
     }
@@ -375,7 +478,11 @@ export default function App() {
   // Trigger test setup for a subject
   const handleSubjectSelect = (subject: Subject) => {
     setSelectedSubject(subject);
-    setIsConfiguringTest(true);
+    if (directGenerateMode) {
+      triggerTestGeneration(subject, numQuestions, testLanguage, selectedYear);
+    } else {
+      setIsConfiguringTest(true);
+    }
   };
 
   // Trigger combined (all subjects) test setup
@@ -390,13 +497,21 @@ export default function App() {
       topics: ["Full Syllabus"]
     };
     setSelectedSubject(virtualSubject);
-    setNumQuestions(15);
-    setIsConfiguringTest(true);
+    if (directGenerateMode) {
+      triggerTestGeneration(virtualSubject, 15, testLanguage, selectedYear);
+    } else {
+      setNumQuestions(15);
+      setIsConfiguringTest(true);
+    }
   };
 
-  // Generate test using backend API with a fallback
-  const handleStartTest = async () => {
-    if (!selectedSubject) return;
+  // Centralized robust test generation function
+  const triggerTestGeneration = async (
+    subject: Subject,
+    qCount: number,
+    lang: string,
+    yearStr: string
+  ) => {
     setIsLoadingTest(true);
     setIsConfiguringTest(false);
     setSelectedAnswers({});
@@ -413,10 +528,10 @@ export default function App() {
         body: JSON.stringify({
           className: selectedClass,
           stream: selectedClass === "12th" ? selectedStreamId : undefined,
-          subject: selectedSubject.name,
-          language: testLanguage,
-          numQuestions: numQuestions,
-          year: selectedYear
+          subject: subject.name,
+          language: lang,
+          numQuestions: qCount,
+          year: yearStr
         })
       });
 
@@ -427,62 +542,37 @@ export default function App() {
       const data = await response.json();
       if (data && data.questions && data.questions.length > 0) {
         setCurrentTest(data);
-        setTestSource(`Google Grounding (${selectedYear})`);
+        setTestSource(`Google Grounding (${yearStr})`);
       } else {
         throw new Error("Incomplete questions structure returned.");
       }
     } catch (err) {
-      console.warn("Using fallback local database due to API error/missing key:", err);
-      // Fallback to local DB
-      let fallbackQuestions: Question[] = [];
-      if (selectedSubject.id === "all_subjects") {
-        if (selectedClass === "10th") {
-          fallbackQuestions = [
-            ...(PRE_BAKED_QUESTIONS["matric_science"] || []),
-            ...(PRE_BAKED_QUESTIONS["matric_math"] || [])
-          ];
-        } else {
-          if (selectedStreamId === "science") {
-            fallbackQuestions = [...(PRE_BAKED_QUESTIONS["physics"] || [])];
-          } else if (selectedStreamId === "commerce") {
-            fallbackQuestions = [...(PRE_BAKED_QUESTIONS["accountancy"] || [])];
-          } else {
-            fallbackQuestions = [...(PRE_BAKED_QUESTIONS["history"] || [])];
-          }
-        }
-      } else {
-        fallbackQuestions = PRE_BAKED_QUESTIONS[selectedSubject.id] || PRE_BAKED_QUESTIONS["matric_science"];
-      }
-
-      // Scale questions if requested amount is different
-      let processedQuestions = [...fallbackQuestions];
-      if (processedQuestions.length === 0) {
-        // Safe default question if nothing matches
-        processedQuestions = [
-          {
-            id: 1,
-            questionText: `Sample question for Bihar Board ${selectedSubject.name} (Bilingual)\nबिहार बोर्ड ${selectedSubject.hindiName} के लिए नमूना प्रश्न`,
-            options: ["Option A / विकल्प A", "Option B / विकल्प B", "Option C / विकल्प C", "Option D / विकल्प D"],
-            correctOption: "A",
-            explanation: "BSEB past exam pattern matches this concept. Standard objective question.",
-            difficulty: "Medium"
-          }
-        ];
-      }
-      
-      // Shuffle or adjust to match user count
-      processedQuestions = processedQuestions.slice(0, numQuestions);
+      console.warn("Using high-fidelity dynamic procedural generator fallback:", err);
+      const todayStr = new Date().toDateString();
+      const processedQuestions = generateDailyQuestions(
+        subject.name,
+        selectedClass,
+        qCount,
+        todayStr,
+        selectedClass === "12th" ? selectedStreamId : undefined
+      );
 
       setCurrentTest({
-        subject: selectedSubject.name,
+        subject: subject.name,
         className: selectedClass,
         stream: selectedClass === "12th" ? selectedStreamId : "General",
         questions: processedQuestions
       });
-      setTestSource(`Local PYQ DB (${selectedYear})`);
+      setTestSource(`Local Generated PYQ (${yearStr})`);
     } finally {
       setIsLoadingTest(false);
     }
+  };
+
+  // Generate test using backend API with a fallback (modal submission)
+  const handleStartTest = () => {
+    if (!selectedSubject) return;
+    triggerTestGeneration(selectedSubject, numQuestions, testLanguage, selectedYear);
   };
 
   // Generate Schedule using backend API
@@ -816,6 +906,30 @@ export default function App() {
                           </button>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Direct Generate Mode Toggle Switch */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-4.5 flex items-center justify-between shadow-inner">
+                      <div className="flex items-center gap-2">
+                        <div className={`p-1.5 rounded-lg shrink-0 transition-colors ${directGenerateMode ? "bg-yellow-500/20 text-yellow-400" : "bg-slate-800 text-slate-500"}`}>
+                          <Zap className={`w-3.5 h-3.5 ${directGenerateMode ? "fill-yellow-400 animate-pulse" : ""}`} />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold text-white flex items-center gap-1">
+                            Direct Generate Mode
+                          </p>
+                          <p className="text-[9px] text-slate-300">Bypass setup & start test in 1-click</p>
+                        </div>
+                      </div>
+                      <button
+                        id="direct-generate-toggle"
+                        onClick={() => setDirectGenerateMode(!directGenerateMode)}
+                        className={`w-9 h-5 flex items-center rounded-full p-0.5 cursor-pointer transition-colors ${
+                          directGenerateMode ? "bg-emerald-500 justify-end" : "bg-slate-700 justify-start"
+                        }`}
+                      >
+                        <div className="bg-white w-4 h-4 rounded-full shadow-md" />
+                      </button>
                     </div>
 
                     <div className="space-y-3.5">
@@ -1341,6 +1455,21 @@ export default function App() {
 
                 {/* Sub Class Toggles */}
                 <div className="flex flex-wrap items-center gap-3">
+                  {/* Direct Generate Toggle Option */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-xs">
+                    <Zap className={`w-3.5 h-3.5 transition-colors ${directGenerateMode ? "text-yellow-500 fill-yellow-500" : "text-slate-400"}`} />
+                    <span className="text-[10px] font-bold text-slate-700">Instant Direct Play</span>
+                    <button
+                      id="direct-generate-subject-toggle"
+                      onClick={() => setDirectGenerateMode(!directGenerateMode)}
+                      className={`w-8 h-4.5 flex items-center rounded-full p-0.5 cursor-pointer transition-colors ${
+                        directGenerateMode ? "bg-emerald-500 justify-end" : "bg-slate-300 justify-start"
+                      }`}
+                    >
+                      <div className="bg-white w-3.5 h-3.5 rounded-full shadow-xs" />
+                    </button>
+                  </div>
+
                   <div className="bg-slate-100 p-1 rounded-xl flex">
                     <button
                       id="select-class-12"
@@ -1507,12 +1636,12 @@ export default function App() {
                 {/* Question Count Select */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Number of Questions (प्रश्नों की संख्या):</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {[5, 10, 15, 20].map((num) => (
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[10, 30, 50, 100, 200].map((num) => (
                       <button
                         key={num}
                         onClick={() => setNumQuestions(num)}
-                        className={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                        className={`py-2 rounded-xl text-[11px] font-bold transition-all border ${
                           numQuestions === num
                             ? "bg-indigo-600 text-white border-indigo-600"
                             : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
@@ -2445,6 +2574,13 @@ export default function App() {
 
                 {/* Message display area */}
                 <div className="flex-grow p-6 overflow-y-auto space-y-4 bg-slate-50/30 flex flex-col">
+                  {chatError && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center gap-2 mb-2 animate-fade-in">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>{chatError}</span>
+                    </div>
+                  )}
+
                   {(() => {
                     const filtered = chatMessages.filter(
                       (msg) => chatFilter === "All" || msg.className === chatFilter
@@ -2462,46 +2598,55 @@ export default function App() {
                       );
                     }
 
-                    return filtered.map((msg) => {
-                      const isMe = msg.senderName === (chatNickname.trim() || "Anonym Topper");
-                      return (
-                        <div
-                          key={msg.id}
-                          className={`flex flex-col max-w-[85%] ${
-                            isMe ? "ml-auto items-end" : "mr-auto items-start"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1 text-[10px] text-slate-500 font-semibold">
-                            <span className="font-bold text-slate-800">{msg.senderName}</span>
-                            <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
-                              📍 {msg.district}
-                            </span>
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded text-white font-bold ${
-                                msg.className === "10th"
-                                  ? "bg-emerald-600"
-                                  : msg.className === "12th"
-                                  ? "bg-indigo-600"
-                                  : "bg-slate-600"
+                    return (
+                      <>
+                        {filtered.map((msg) => {
+                          // Correctly identify Me using unique senderId, fallback to senderName comparison
+                          const isMe = msg.senderId 
+                            ? msg.senderId === chatUserId 
+                            : msg.senderName === (chatNickname.trim() || "Anonym Topper");
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`flex flex-col max-w-[85%] ${
+                                isMe ? "ml-auto items-end" : "mr-auto items-start"
                               }`}
                             >
-                              Class {msg.className}
-                            </span>
-                            <span className="text-[9px] font-normal opacity-85">{msg.timestamp}</span>
-                          </div>
-                          
-                          <div
-                            className={`p-3.5 rounded-2xl text-xs leading-relaxed shadow-xs ${
-                              isMe
-                                ? "bg-teal-600 text-white rounded-tr-none"
-                                : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"
-                            }`}
-                          >
-                            {msg.message}
-                          </div>
-                        </div>
-                      );
-                    });
+                              <div className="flex items-center gap-2 mb-1 text-[10px] text-slate-500 font-semibold">
+                                <span className="font-bold text-slate-800">{msg.senderName}</span>
+                                <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
+                                  📍 {msg.district}
+                                </span>
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded text-white font-bold ${
+                                    msg.className === "10th"
+                                      ? "bg-emerald-600"
+                                      : msg.className === "12th"
+                                      ? "bg-indigo-600"
+                                      : "bg-slate-600"
+                                  }`}
+                                >
+                                  Class {msg.className}
+                                </span>
+                                <span className="text-[9px] font-normal opacity-85">{msg.timestamp}</span>
+                              </div>
+                              
+                              <div
+                                className={`p-3.5 rounded-2xl text-xs leading-relaxed shadow-xs ${
+                                  isMe
+                                    ? "bg-teal-600 text-white rounded-tr-none"
+                                    : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"
+                                }`}
+                              >
+                                {msg.message}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {/* Auto scroll anchor */}
+                        <div ref={chatBottomRef} />
+                      </>
+                    );
                   })()}
                 </div>
 
