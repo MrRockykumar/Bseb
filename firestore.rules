@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Validation helper for IDs
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation helper for PersonalNote ID and Fields
+    function isValidPersonalNote(data) {
+      return data.keys().hasAll(['title', 'content', 'subject', 'timestamp', 'userId'])
+        && data.keys().size() == 5
+        && data.title is string && data.title.size() <= 100
+        && data.content is string && data.content.size() <= 5000
+        && data.subject is string && data.subject.size() <= 50
+        && data.timestamp is string && data.timestamp.size() <= 50
+        && data.userId is string && data.userId.size() <= 100;
+    }
+
+    // Validation helper for SavedTest ID and Fields
+    function isValidSavedTest(data) {
+      return data.keys().hasAll(['id', 'subject', 'className', 'stream', 'questions', 'selectedAnswers', 'score', 'totalQuestions', 'percentage', 'timestamp', 'userId'])
+        && data.keys().size() == 11
+        && data.id is string && data.id.size() <= 100
+        && data.subject is string && data.subject.size() <= 50
+        && data.className is string && data.className.size() <= 10
+        && data.stream is string && data.stream.size() <= 20
+        && data.questions is list && data.questions.size() <= 500
+        && data.selectedAnswers is map
+        && data.score is int
+        && data.totalQuestions is int
+        && data.percentage is number
+        && data.timestamp is string && data.timestamp.size() <= 50
+        && data.userId is string && data.userId.size() <= 100;
+    }
+
+    match /personal_notes/{noteId} {
+      allow create: if isValidId(noteId) && isValidPersonalNote(request.resource.data);
+      allow get, delete: if isValidId(noteId);
+      allow list: if true;
+      allow update: if isValidId(noteId) && isValidPersonalNote(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /saved_tests/{testId} {
+      allow create: if isValidId(testId) && isValidSavedTest(request.resource.data);
+      allow get, delete: if isValidId(testId);
+      allow list: if true;
+      allow update: if isValidId(testId) && isValidSavedTest(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+    }
+  }
+}

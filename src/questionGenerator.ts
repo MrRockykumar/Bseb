@@ -63,7 +63,7 @@ export function generateDailyQuestions(
     let subType = "general";
 
     // Handle "All Subjects" cycling
-    if (normSub === "all subjects" || normSub === "all_subjects") {
+    if (normSub === "all subjects" || normSub === "all_subjects" || normSub === "daily quiz challenge" || normSub === "daily_quiz") {
       let availableKeys: string[] = [];
       if (className === "10th") {
         availableKeys = ["science", "mathematics", "social science", "hindi", "english", "sanskrit"];

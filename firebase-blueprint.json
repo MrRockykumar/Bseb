@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "PersonalNote": {
+      "title": "PersonalNote",
+      "description": "A revision note created by a student for Bihar Board preparation",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Title of the revision note"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 5000,
+          "description": "HTML or markdown content of the revision note"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "The subject name for the note"
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Human readable date/time string"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The custom user ID from local storage"
+        }
+      },
+      "required": ["title", "content", "subject", "timestamp", "userId"]
+    },
+    "SavedTest": {
+      "title": "SavedTest",
+      "description": "A saved mock test session including scores and answers",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Unique test session ID"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Subject of the mock test"
+        },
+        "className": {
+          "type": "string",
+          "maxLength": 10,
+          "description": "The class level (10th or 12th)"
+        },
+        "stream": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "The academic stream (Science, Commerce, Arts, General)"
+        },
+        "score": {
+          "type": "integer",
+          "description": "The final score achieved by the user"
+        },
+        "totalQuestions": {
+          "type": "integer",
+          "description": "Total number of questions in the test"
+        },
+        "percentage": {
+          "type": "number",
+          "description": "Percentage score"
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Date/time the test was saved"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The custom user ID from local storage"
+        }
+      },
+      "required": ["id", "subject", "className", "stream", "score", "totalQuestions", "percentage", "timestamp", "userId"]
+    }
+  },
+  "firestore": {
+    "personal_notes/{noteId}": {
+      "schema": "PersonalNote",
+      "description": "Student revision notes"
+    },
+    "saved_tests/{testId}": {
+      "schema": "SavedTest",
+      "description": "Saved mock exam result histories"
+    }
+  }
+}

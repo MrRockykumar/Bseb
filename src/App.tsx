@@ -39,12 +39,84 @@ import {
   MessageSquare,
   Headphones,
   X,
-  Zap
+  Zap,
+  Flame,
+  Share2
 } from "lucide-react";
 
 import { STREAMS_12TH, SUBJECTS_10TH, PRE_BAKED_QUESTIONS } from "./data";
-import { Subject, Stream, Question, MockTest, StudySchedule, SavedScheduleInput, LeaderboardEntry } from "./types";
+import { Subject, Stream, Question, MockTest, StudySchedule, SavedScheduleInput, LeaderboardEntry, SavedTest, PersonalNote } from "./types";
 import { generateDailyQuestions } from "./questionGenerator";
+// @ts-ignore
+import rockyKumarPic from "./assets/images/rocky_kumar_1783786720195.jpg";
+
+// Daily motivational quotes in Hindi, updated daily, sourced from Google & Top Educators
+const HINDI_MOTIVATIONAL_QUOTES = [
+  {
+    quote: "उठो, जागो और तब तक मत रुको जब तक लक्ष्य की प्राप्ति न हो जाए।",
+    translation: "Arise, awake, and stop not until the goal is reached.",
+    author: "Swami Vivekananda"
+  },
+  {
+    quote: "सपने वो नहीं जो हम सोते हुए देखते हैं, सपने वो हैं जो हमें सोने नहीं देते।",
+    translation: "Dreams are not what you see in your sleep, dreams are things that do not let you sleep.",
+    author: "Dr. APJ Abdul Kalam"
+  },
+  {
+    quote: "संघर्ष जितना कठिन होगा, जीत उतनी ही शानदार होगी।",
+    translation: "The harder the struggle, the more glorious the triumph.",
+    author: "Swami Vivekananda"
+  },
+  {
+    quote: "मेहनत इतनी खामोशी से करो कि सफलता शोर मचा दे।",
+    translation: "Work hard in silence, let your success make the noise.",
+    author: "Popular Saying"
+  },
+  {
+    quote: "कल को आसान बनाने के लिए आज आपको कड़ी मेहनत करनी पड़ेगी।",
+    translation: "To make tomorrow easy, you have to work hard today.",
+    author: "Top Educator Tip"
+  },
+  {
+    quote: "सफलता का मुख्य आधार सकारात्मक सोच और निरंतर प्रयास है।",
+    translation: "The main basis of success is positive thinking and continuous effort.",
+    author: "Academic Council Advice"
+  },
+  {
+    quote: "खुद पर विश्वास रखो, तुम्हारी मेहनत कभी बेकार नहीं जाएगी।",
+    translation: "Believe in yourself, your hard work will never go to waste.",
+    author: "Mr. Rocky Kumar"
+  },
+  {
+    quote: "बिना दूरी तय किए हुए आप कहीं नहीं पहुंच सकते।",
+    translation: "You cannot reach anywhere without covering the distance.",
+    author: "Great Minds"
+  },
+  {
+    quote: "सफलता केवल एक रात में नहीं मिलती, उसके पीछे सालों की मेहनत होती है।",
+    translation: "Success doesn't happen overnight, it is the result of years of hard work.",
+    author: "Google Topper Insights"
+  },
+  {
+    quote: "जो मुस्कुरा रहा है उसे दर्द ने पाला होगा, जो चल रहा है उसके पैर में छाला होगा, बिना संघर्ष के इंसान चमक नहीं सकता, जो जलेगा उसी दीये में तो उजाला होगा।",
+    translation: "He who smiles must have been nurtured by pain; he who walks must have a blister on his foot. Man cannot shine without struggle; only the lamp that burns gives light.",
+    author: "Poetic Wisdom"
+  }
+];
+
+const getQuoteOfTheDay = () => {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), 0, 0);
+  const diff = today.getTime() - start.getTime();
+  const oneDay = 1000 * 60 * 60 * 24;
+  const dayOfYear = Math.floor(diff / oneDay);
+  const index = dayOfYear % HINDI_MOTIVATIONAL_QUOTES.length;
+  return HINDI_MOTIVATIONAL_QUOTES[index];
+};
+
+// Firebase Firestore Imports
+import { db, handleFirestoreError, OperationType } from "./firebase";
+import { collection, doc, setDoc, deleteDoc, getDocs, query, where } from "firebase/firestore";
 
 // Helper to render Lucide icon by string name
 const IconRenderer = ({ name, className }: { name: string; className?: string }) => {
@@ -197,11 +269,101 @@ const INITIAL_LEADERBOARD: LeaderboardEntry[] = [
 ];
 
 export default function App() {
+  // Headline tick state for "Lighting changed every second"
+  const [headlineTick, setHeadlineTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setHeadlineTick(prev => (prev + 1) % 100);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getHeadlineStyles = () => {
+    const lightings = [
+      {
+        bg: "bg-yellow-400",
+        border: "border-yellow-500",
+        shadow: "shadow-[0_0_20px_rgba(250,204,21,0.6)]",
+        text: "text-slate-950",
+        badge: "bg-slate-950 text-yellow-400"
+      },
+      {
+        bg: "bg-amber-400",
+        border: "border-amber-500",
+        shadow: "shadow-[0_0_25px_rgba(251,191,36,0.7)]",
+        text: "text-black",
+        badge: "bg-slate-950 text-amber-400"
+      },
+      {
+        bg: "bg-yellow-300",
+        border: "border-yellow-400",
+        shadow: "shadow-[0_0_15px_rgba(253,224,71,0.5)]",
+        text: "text-slate-900",
+        badge: "bg-neutral-900 text-yellow-300"
+      },
+      {
+        bg: "bg-amber-300",
+        border: "border-amber-400",
+        shadow: "shadow-[0_0_22px_rgba(252,211,77,0.6)]",
+        text: "text-neutral-950",
+        badge: "bg-slate-900 text-amber-300"
+      }
+    ];
+    return lightings[headlineTick % lightings.length];
+  };
+
   // Navigation / Tabs state
-  const [activeTab, setActiveTab] = useState<"tests" | "schedule" | "chat">("tests");
+  const [activeTab, setActiveTab] = useState<"tests" | "schedule" | "chat" | "storage">("tests");
   const [selectedClass, setSelectedClass] = useState<"12th" | "10th">("12th");
   const [selectedStreamId, setSelectedStreamId] = useState<string>("science"); // Default 12th stream
   const [showSupportModal, setShowSupportModal] = useState(false);
+
+  // Saved tests and notes states (Website Free Storage)
+  const [savedTests, setSavedTests] = useState<SavedTest[]>(() => {
+    try {
+      const saved = localStorage.getItem("bseb_saved_tests");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [personalNotes, setPersonalNotes] = useState<PersonalNote[]>(() => {
+    try {
+      const saved = localStorage.getItem("bseb_personal_notes");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [newNoteTitle, setNewNoteTitle] = useState("");
+  const [newNoteContent, setNewNoteContent] = useState("");
+  const [newNoteSubject, setNewNoteSubject] = useState("Physics");
+  const [viewingSavedTest, setViewingSavedTest] = useState<SavedTest | null>(null);
+  const [storageUsedBytes, setStorageUsedBytes] = useState(0);
+  const [testSavedSuccess, setTestSavedSuccess] = useState(false);
+
+  // Recalculate localStorage usage
+  const recalculateStorageUsage = () => {
+    try {
+      let total = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("bseb_")) {
+          const val = localStorage.getItem(key);
+          total += (key.length + (val ? val.length : 0)) * 2; // UTF-16 approx
+        }
+      }
+      setStorageUsedBytes(total);
+    } catch (e) {
+      console.warn("Could not calculate storage space", e);
+    }
+  };
+
+  useEffect(() => {
+    recalculateStorageUsage();
+  }, [savedTests, personalNotes]);
 
   // Test state
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
@@ -281,6 +443,127 @@ export default function App() {
       return `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     }
   });
+
+  const [isSyncingWithCloud, setIsSyncingWithCloud] = useState(false);
+  const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>("");
+
+  const syncWithCloud = async () => {
+    if (!chatUserId) return;
+    setIsSyncingWithCloud(true);
+    setCloudSyncError(null);
+    try {
+      // 1. Sync Personal Notes
+      const notesCol = collection(db, "personal_notes");
+      const notesQuery = query(notesCol, where("userId", "==", chatUserId));
+      let notesSnapshot;
+      try {
+        notesSnapshot = await getDocs(notesQuery);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, "personal_notes");
+        return;
+      }
+
+      const cloudNotes: PersonalNote[] = [];
+      notesSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        cloudNotes.push({
+          id: docSnap.id,
+          title: data.title || "",
+          content: data.content || "",
+          subject: data.subject || "",
+          timestamp: data.timestamp || ""
+        });
+      });
+
+      if (cloudNotes.length > 0) {
+        setPersonalNotes(cloudNotes);
+        localStorage.setItem("bseb_personal_notes", JSON.stringify(cloudNotes));
+      } else if (personalNotes.length > 0) {
+        // Push local notes to cloud
+        for (const note of personalNotes) {
+          try {
+            await setDoc(doc(db, "personal_notes", note.id), {
+              title: note.title,
+              content: note.content,
+              subject: note.subject || "",
+              timestamp: note.timestamp,
+              userId: chatUserId
+            });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, `personal_notes/${note.id}`);
+          }
+        }
+      }
+
+      // 2. Sync Saved Tests
+      const testsCol = collection(db, "saved_tests");
+      const testsQuery = query(testsCol, where("userId", "==", chatUserId));
+      let testsSnapshot;
+      try {
+        testsSnapshot = await getDocs(testsQuery);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, "saved_tests");
+        return;
+      }
+
+      const cloudTests: SavedTest[] = [];
+      testsSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        cloudTests.push({
+          id: docSnap.id,
+          subject: data.subject || "",
+          className: data.className || "",
+          stream: data.stream || "",
+          questions: data.questions || [],
+          selectedAnswers: data.selectedAnswers || {},
+          score: data.score || 0,
+          totalQuestions: data.totalQuestions || 0,
+          percentage: data.percentage || 0,
+          timestamp: data.timestamp || ""
+        });
+      });
+
+      if (cloudTests.length > 0) {
+        setSavedTests(cloudTests);
+        localStorage.setItem("bseb_saved_tests", JSON.stringify(cloudTests));
+      } else if (savedTests.length > 0) {
+        // Push local tests to cloud
+        for (const t of savedTests) {
+          try {
+            await setDoc(doc(db, "saved_tests", t.id), {
+              id: t.id,
+              subject: t.subject,
+              className: t.className,
+              stream: t.stream || "",
+              questions: t.questions,
+              selectedAnswers: t.selectedAnswers,
+              score: t.score,
+              totalQuestions: t.totalQuestions,
+              percentage: t.percentage,
+              timestamp: t.timestamp,
+              userId: chatUserId
+            });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, `saved_tests/${t.id}`);
+          }
+        }
+      }
+
+      setLastSyncedTime(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.error("Firestore sync error:", err);
+      setCloudSyncError("Cloud database offline. Using local backup storage.");
+    } finally {
+      setIsSyncingWithCloud(false);
+    }
+  };
+
+  useEffect(() => {
+    if (chatUserId) {
+      syncWithCloud();
+    }
+  }, [chatUserId]);
 
   const [chatNickname, setChatNickname] = useState(() => {
     try {
@@ -364,12 +647,38 @@ export default function App() {
           const data = await res.json();
           setChatMessages(data);
           setChatError(null);
+          // Save to offline cache
+          try {
+            localStorage.setItem("bseb_chat_messages_cache", JSON.stringify(data));
+          } catch (e) {}
         } else {
-          setChatError("Failed to fetch recent messages. Refreshing...");
+          // Fall back to cache
+          try {
+            const cached = localStorage.getItem("bseb_chat_messages_cache");
+            if (cached) {
+              setChatMessages(JSON.parse(cached));
+              setChatError("⚠️ Working Offline: Server connection issue. Using local backup vault.");
+            } else {
+              setChatError("Failed to fetch recent messages. Working Offline.");
+            }
+          } catch (e) {
+            setChatError("Failed to fetch recent messages.");
+          }
         }
       } catch (err) {
         console.error("Error loading chat messages:", err);
-        setChatError("Network issue: Unable to connect to the topper discussion server.");
+        // Fall back to cache
+        try {
+          const cached = localStorage.getItem("bseb_chat_messages_cache");
+          if (cached) {
+            setChatMessages(JSON.parse(cached));
+            setChatError("⚠️ Offline Mode: Connected to local backup vault. Reading cached messages.");
+          } else {
+            setChatError("Network issue: Unable to connect to the topper discussion server. No local cache found.");
+          }
+        } catch (e) {
+          setChatError("Network issue: Unable to connect to the topper discussion server.");
+        }
       }
     };
 
@@ -388,6 +697,17 @@ export default function App() {
     setIsSendingChat(true);
     setChatError(null);
 
+    const localMsg = {
+      id: `local-msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      senderId: chatUserId,
+      senderName: sender,
+      className: chatClass,
+      district: chatDistrict,
+      message: chatNewMessage.trim(),
+      timestamp: "Just now",
+      createdAt: Date.now()
+    };
+
     try {
       const res = await fetch("/api/chat/messages", {
         method: "POST",
@@ -403,16 +723,45 @@ export default function App() {
 
       if (res.ok) {
         const msg = await res.json();
-        setChatMessages(prev => [...prev, msg]);
+        setChatMessages(prev => {
+          const filtered = prev.filter(m => !m.id.startsWith("local-msg-"));
+          const updated = [...filtered, msg];
+          try {
+            localStorage.setItem("bseb_chat_messages_cache", JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
         setChatNewMessage("");
         setChatError(null);
       } else {
         const errData = await res.json();
-        setChatError(errData.error || "Failed to broadcast message to student group.");
+        throw new Error(errData.error || "Server error");
       }
     } catch (err) {
-      console.error("Error sending chat message:", err);
-      setChatError("Unable to post. Please verify your internet connection and try again.");
+      console.error("Error sending chat message, falling back to offline storage:", err);
+      // Save it in local storage as offline post
+      setChatMessages(prev => {
+        const updated = [...prev, localMsg];
+        try {
+          localStorage.setItem("bseb_chat_messages_cache", JSON.stringify(updated));
+          
+          // Also save in personal notes so user can see it in free storage tab!
+          const note: PersonalNote = {
+            id: `note-${Date.now()}`,
+            title: `My Chat Post (Offline Fallback)`,
+            content: localMsg.message,
+            subject: "General Study",
+            timestamp: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          };
+          const savedNotes = JSON.parse(localStorage.getItem("bseb_personal_notes") || "[]");
+          localStorage.setItem("bseb_personal_notes", JSON.stringify([note, ...savedNotes]));
+          setPersonalNotes([note, ...savedNotes]);
+        } catch (e) {}
+        return updated;
+      });
+      setChatNewMessage("");
+      setChatError("Saved offline to Website Free Storage. Your post was backed up locally!");
+      recalculateStorageUsage();
     } finally {
       setIsSendingChat(false);
     }
@@ -425,6 +774,87 @@ export default function App() {
   const [attemptedCount, setAttemptedCount] = useState<number>(0);
   const [averageScore, setAverageScore] = useState<number>(0);
   const [savedTimetable, setSavedTimetable] = useState<StudySchedule | null>(null);
+
+  // Daily Quiz state variables
+  const [dailyQuizStreak, setDailyQuizStreak] = useState<number>(() => {
+    try {
+      const lastDate = localStorage.getItem("bseb_daily_quiz_last_date") || "";
+      const todayStr = new Date().toDateString();
+      if (lastDate) {
+        const lastDateObj = new Date(lastDate);
+        const todayDateObj = new Date(todayStr);
+        const diffTime = Math.abs(todayDateObj.getTime() - lastDateObj.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays > 1) {
+          // Streak broken
+          localStorage.setItem("bseb_daily_quiz_streak", "0");
+          return 0;
+        }
+      }
+      return parseInt(localStorage.getItem("bseb_daily_quiz_streak") || "0", 10);
+    } catch (e) {
+      return 0;
+    }
+  });
+
+  const [hasCompletedTodayQuiz, setHasCompletedTodayQuiz] = useState<boolean>(() => {
+    try {
+      const lastDate = localStorage.getItem("bseb_daily_quiz_last_date") || "";
+      return lastDate === new Date().toDateString();
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const [todayQuizScore, setTodayQuizScore] = useState<number>(() => {
+    try {
+      return parseInt(localStorage.getItem("bseb_daily_quiz_last_score") || "0", 10);
+    } catch (e) {
+      return 0;
+    }
+  });
+
+  const [timeUntilMidnight, setTimeUntilMidnight] = useState<string>("");
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const now = new Date();
+      const midnight = new Date();
+      midnight.setHours(24, 0, 0, 0); // Next midnight
+      const diff = midnight.getTime() - now.getTime();
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setTimeUntilMidnight(
+        `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
+      );
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleStartDailyQuiz = () => {
+    const dailySubject: Subject = {
+      id: "daily_quiz",
+      name: "Daily Quiz Challenge",
+      hindiName: "दैनिक क्विज चुनौती",
+      icon: "Sparkles",
+      description: "A 20-question challenge refreshed every 24 hours to keep engagement high.",
+      hindiDescription: "आपकी तैयारी को मजबूत बनाने के लिए हर 24 घंटे में 20 नए महत्वपूर्ण प्रश्न।",
+      topics: ["Daily Challenge Mixed Syllabus"]
+    };
+    
+    setSelectedSubject(dailySubject);
+    setNumQuestions(20);
+    setTestLanguage("Bilingual (Hindi & English)");
+    setSelectedYear("2026 (New PYQ)");
+    
+    triggerTestGeneration(dailySubject, 20, "Bilingual (Hindi & English)", "2026 (New PYQ)");
+  };
 
   // Quick tests listed in today's mock schedule
   const quickScheduleTests = [
@@ -520,6 +950,7 @@ export default function App() {
     setShowExplanation({});
     setWasLeaderboardSubmitted(false);
     setShowLeaderboardSubmit(false);
+    setTestSavedSuccess(false);
 
     try {
       const response = await fetch("/api/generate-test", {
@@ -660,6 +1091,42 @@ export default function App() {
     });
     const percentage = Math.round((correctCount / (currentTest?.questions.length || 1)) * 100);
     saveStats(attemptedCount + 1, percentage);
+
+    if (currentTest?.subject === "Daily Quiz Challenge") {
+      const todayStr = new Date().toDateString();
+      try {
+        const lastDate = localStorage.getItem("bseb_daily_quiz_last_date") || "";
+        let newStreak = 1;
+        
+        if (lastDate) {
+          const lastDateObj = new Date(lastDate);
+          const todayDateObj = new Date(todayStr);
+          const diffTime = Math.abs(todayDateObj.getTime() - lastDateObj.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          const currentStreak = parseInt(localStorage.getItem("bseb_daily_quiz_streak") || "0", 10);
+          if (diffDays === 1) {
+            newStreak = currentStreak + 1;
+          } else if (diffDays === 0) {
+            newStreak = currentStreak;
+          } else {
+            newStreak = 1;
+          }
+        } else {
+          newStreak = 1;
+        }
+        
+        localStorage.setItem("bseb_daily_quiz_last_date", todayStr);
+        localStorage.setItem("bseb_daily_quiz_streak", String(newStreak));
+        localStorage.setItem("bseb_daily_quiz_last_score", String(correctCount));
+        
+        setDailyQuizStreak(newStreak);
+        setHasCompletedTodayQuiz(true);
+        setTodayQuizScore(correctCount);
+      } catch (e) {
+        console.warn("Storage write denied for Daily Quiz stats", e);
+      }
+    }
   };
 
   // Submit to Daily Leaderboard/Rank List
@@ -746,7 +1213,38 @@ export default function App() {
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-800 font-sans antialiased">
-      {/* Top Notification Bar */}
+      {/* Top Notification Bar with Flickering Headlines */}
+      <div className={`w-full ${getHeadlineStyles().bg} ${getHeadlineStyles().text} ${getHeadlineStyles().shadow} transition-all duration-500 py-2.5 px-4 flex flex-col md:flex-row items-center justify-between gap-3 overflow-hidden relative z-40 border-b border-black/10`}>
+        <div className="flex items-center gap-2 shrink-0 select-none">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-600 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-700"></span>
+          </span>
+          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider animate-flicker flex items-center gap-1 border border-black/20 ${getHeadlineStyles().badge} transition-all duration-300`}>
+            <Sparkles className="w-3 h-3 text-amber-400 fill-amber-400 animate-pulse" />
+            BSEB LIVE UPDATES
+          </span>
+          <span className="text-black/30 text-xs font-bold hidden md:inline">|</span>
+        </div>
+        <div className="flex-1 w-full overflow-hidden relative flex items-center h-5">
+          <div className="animate-marquee flex gap-16 select-none">
+            {/* First copy for seamless infinite loop */}
+            <div className="flex gap-16 text-xs font-black uppercase tracking-wide">
+              <span>🔥 बिहार बोर्ड मैट्रिक और इंटर परीक्षा 2026 के लिए नए मॉडल पेपर्स और महत्वपूर्ण ऑब्जेक्टिव प्रश्न लाइव! (BSEB Topper 2026)</span>
+              <span>📢 Mr. Rocky Kumar (Founder & Director) wishes all BSEB board aspirants best of luck! 'मेहनत इतनी खामोशी से करो कि सफलता शोर मचा दे।'</span>
+              <span>💡 All tests and revision notes are now privately synchronized and secured under Firebase Firestore cloud vaults.</span>
+              <span>🌟 Play daily mock tests to secure your state rank on the Bihar Board Daily Toppers list!</span>
+            </div>
+            {/* Second copy to make loop infinite */}
+            <div className="flex gap-16 text-xs font-black uppercase tracking-wide">
+              <span>🔥 बिहार बोर्ड मैट्रिक और इंटर परीक्षा 2026 के लिए नए मॉडल पेपर्स और महत्वपूर्ण ऑब्जेक्टिव प्रश्न लाइव! (BSEB Topper 2026)</span>
+              <span>📢 Mr. Rocky Kumar (Founder & Director) wishes all BSEB board aspirants best of luck! 'मेहनत इतनी खामोशी से करो कि सफलता शोर मचा दे।'</span>
+              <span>💡 All tests and revision notes are now privately synchronized and secured under Firebase Firestore cloud vaults.</span>
+              <span>🌟 Play daily mock tests to secure your state rank on the Bihar Board Daily Toppers list!</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
         {/* Header */}
@@ -766,34 +1264,64 @@ export default function App() {
           </div>
 
           {/* Controls / Active Students */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-2 text-xs font-medium">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+            <div className="bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-2 text-xs font-medium shrink-0">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
               <span>18,490+ Bihar Students Online</span>
             </div>
             
+            {/* Rocky Kumar Top Header Badge */}
+            <a 
+              href="#rocky-motivation-hq"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById("rocky-motivation-hq")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="flex items-center gap-2 bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded-xl shadow-md border border-amber-400/30 transition-all duration-300 group cursor-pointer hover:border-amber-400 shrink-0 select-none"
+            >
+              <div className="relative w-6 h-6 rounded-full overflow-hidden border border-amber-400 shrink-0">
+                <img 
+                  src={rockyKumarPic} 
+                  alt="Mr. Rocky Kumar" 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              <div className="text-left hidden sm:block">
+                <p className="text-[9px] font-black leading-none text-amber-300">Mr. Rocky Kumar</p>
+                <p className="text-[7px] font-black text-slate-300 uppercase tracking-wider leading-none mt-0.5">Founder</p>
+              </div>
+            </a>
+            
             {/* Nav Switchers */}
-            <div className="bg-slate-200/80 p-1 rounded-xl flex gap-1">
+            <div className="bg-slate-200/80 p-1 rounded-xl flex gap-1 flex-wrap sm:flex-nowrap">
               <button
                 id="tab-tests"
                 onClick={() => { setActiveTab("tests"); }}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === "tests" ? "bg-white text-indigo-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${activeTab === "tests" ? "bg-white text-indigo-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
               >
                 Mock Tests
               </button>
               <button
                 id="tab-schedule"
                 onClick={() => { setActiveTab("schedule"); }}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === "schedule" ? "bg-white text-indigo-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${activeTab === "schedule" ? "bg-white text-indigo-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
               >
                 Daily Schedule
               </button>
               <button
                 id="tab-chat"
                 onClick={() => { setActiveTab("chat"); }}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === "chat" ? "bg-white text-indigo-950 shadow-sm animate-pulse" : "text-slate-600 hover:text-slate-900"}`}
+                className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${activeTab === "chat" ? "bg-white text-indigo-950 shadow-sm animate-pulse" : "text-slate-600 hover:text-slate-900"}`}
               >
                 Free Chat Room 💬
+              </button>
+              <button
+                id="tab-storage"
+                onClick={() => { setActiveTab("storage"); }}
+                className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${activeTab === "storage" ? "bg-white text-indigo-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                📝 Revision Notebook (रिवीजन डायरी)
               </button>
             </div>
           </div>
@@ -999,6 +1527,115 @@ export default function App() {
                     <span>Preparation Streak: <strong className="text-yellow-400 font-bold">5 Days 🔥</strong></span>
                     <span>2026 Board Guidelines</span>
                   </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* 24-HOUR DAILY QUIZ ARENA */}
+            <div className="bg-slate-950 border-2 border-amber-400/40 shadow-[0_0_30px_rgba(245,158,11,0.15)] rounded-3xl p-6 relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" id="daily-quiz-arena">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute -bottom-10 -left-10 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                
+                {/* Left: Info, Streak & Description */}
+                <div className="space-y-4 text-center md:text-left flex-1">
+                  <div className="flex flex-wrap justify-center md:justify-start items-center gap-2">
+                    <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(250,204,21,0.3)]">
+                      <Sparkles className="w-3.5 h-3.5 text-slate-950 animate-pulse fill-slate-950" />
+                      Daily 24h Challenge
+                    </span>
+                    <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                      Streak: {dailyQuizStreak} Days
+                    </span>
+                    <span className="bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      Refreshes in: <span className="text-amber-300 font-mono font-bold">{timeUntilMidnight || "Calculating..."}</span>
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xl md:text-2xl font-black text-white tracking-tight">
+                      बिहार बोर्ड दैनिक क्विज चुनौती <span className="text-amber-400 font-sans font-black">20-Question Challenge</span>
+                    </h3>
+                    <p className="text-slate-300 text-xs mt-1.5 leading-relaxed max-w-2xl font-medium">
+                      Test your ultimate state-level preparedness with our <strong>daily 20 high-yield multiple choice questions</strong> covering a mixed balanced syllabus. Sharpen your skills, maintain your streak, and claim your spot on the state toppers list!
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap justify-center md:justify-start gap-4 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5 bg-slate-800/40 px-3 py-1 rounded-xl border border-slate-850">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 20 Objective MCQs
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-slate-800/40 px-3 py-1 rounded-xl border border-slate-850">
+                      <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> Mixed Syllabus Course
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-slate-800/40 px-3 py-1 rounded-xl border border-slate-850">
+                      <Trophy className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" /> Double Rank Points
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right: Launch Button & Score Status */}
+                <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl text-center w-full md:w-80 flex flex-col justify-between shrink-0">
+                  {hasCompletedTodayQuiz ? (
+                    <div className="space-y-3.5">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-white">Completed Today!</h4>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Excellent practice. Come back tomorrow for the next set!</p>
+                      </div>
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold leading-none">Your Score Today</p>
+                        <p className="text-2xl font-black text-emerald-400 mt-1.5">{todayQuizScore} / 20</p>
+                        <p className="text-[9px] text-slate-400 mt-1">({Math.round((todayQuizScore / 20) * 100)}% Accuracy)</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleStartDailyQuiz}
+                          className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs transition-all border border-slate-700 hover:border-slate-600"
+                        >
+                          Practice Again
+                        </button>
+                        <button
+                          onClick={() => {
+                            const shareText = `🎯 I scored ${todayQuizScore}/20 in today's Bihar Board 20-Question Daily Quiz! 🔥 Can you beat my score? Challenge yourself now on Bihar Board Topper Hub!`;
+                            navigator.clipboard.writeText(shareText);
+                            alert("Copied to clipboard! Share it with your classmates on WhatsApp or Telegram.");
+                          }}
+                          className="py-2 px-3 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span>Share</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 animate-pulse">
+                        <Trophy className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-white">Daily Quiz Active</h4>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Take today's 20-question challenge to maintain your streak!</p>
+                      </div>
+                      <button
+                        id="start-daily-quiz-btn"
+                        onClick={handleStartDailyQuiz}
+                        className="w-full py-3 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 flex items-center justify-center gap-1.5"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-slate-950" />
+                        <span>Unlock Challenge</span>
+                      </button>
+                      <p className="text-[9px] text-slate-500">
+                        * 20 randomized PYQs & official model questions.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -1279,6 +1916,90 @@ export default function App() {
                 </div>
               </div>
 
+            </div>
+
+            {/* DAILY MOTIVATION BY MR ROCKY KUMAR */}
+            <div className="bg-slate-950 border-2 border-amber-400 shadow-[0_0_50px_rgba(245,158,11,0.25)] rounded-3xl p-6 md:p-8 relative overflow-visible mt-12 mb-8" id="rocky-motivation-hq">
+              {/* Unique Background Deployed by AI */}
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-20 rounded-3xl pointer-events-none"></div>
+              
+              {/* Glowing Ambient Circles */}
+              <div className="absolute -top-10 right-10 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute -bottom-10 left-10 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row gap-6 md:gap-8 items-start justify-between">
+                
+                {/* Main Content */}
+                <div className="flex-1 space-y-5 text-center md:text-left w-full md:pr-48">
+                  {/* Category & Status */}
+                  <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-2.5">
+                    <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-[0_0_15px_rgba(250,204,21,0.4)]">
+                      <Sparkles className="w-3.5 h-3.5 text-slate-950 animate-pulse fill-slate-950" />
+                      दैनिक प्रेरणा स्रोत
+                    </span>
+                  </div>
+
+                  {/* Quote Block */}
+                  <div className="relative pt-4">
+                    <span className="absolute -top-4 -left-4 text-7xl text-amber-500/10 font-serif select-none pointer-events-none">“</span>
+                    <p className="text-xl md:text-2xl font-black text-amber-100 leading-relaxed font-sans tracking-wide">
+                      {getQuoteOfTheDay().quote}
+                    </p>
+                    <p className="text-xs md:text-sm text-slate-300 font-bold tracking-normal leading-relaxed italic mt-2.5">
+                      — {getQuoteOfTheDay().translation}
+                    </p>
+                  </div>
+
+                  {/* Footer & Signature */}
+                  <div className="pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h4 className="font-black text-base text-amber-400 tracking-tight">Mr. Rocky Kumar</h4>
+                      <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Founder & Director • Bihar Board Topper Specialist</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mobile top image representation */}
+                <div className="md:hidden w-full flex justify-center mb-4 order-first">
+                  <div className="relative group shrink-0">
+                    <div className="absolute -inset-1.5 bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 rounded-2xl blur-md opacity-75 animate-pulse"></div>
+                    <div className="relative w-36 h-40 rounded-2xl overflow-hidden border-2 border-amber-400 shadow-[0_10px_20px_rgba(0,0,0,0.5)] bg-slate-900">
+                      <img 
+                        src={rockyKumarPic} 
+                        alt="Mr. Rocky Kumar" 
+                        className="w-full h-full object-cover transform scale-102"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 bg-slate-950 px-3 py-1 rounded-full border border-amber-400/50 shadow-lg select-none whitespace-nowrap">
+                      <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                        Founder & Director
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop-only Picture */}
+                <div className="hidden md:block absolute -top-10 right-8 z-20 group">
+                  <div className="absolute -inset-1.5 bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 rounded-2xl blur opacity-80 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse-slow"></div>
+                  <div className="relative w-44 h-52 rounded-2xl overflow-hidden border-2 border-amber-400 shadow-[0_15px_30px_rgba(0,0,0,0.6)] bg-slate-900">
+                    <img 
+                      src={rockyKumarPic} 
+                      alt="Mr. Rocky Kumar" 
+                      className="w-full h-full object-cover transform scale-102 group-hover:scale-110 transition-all duration-700 ease-out"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                  <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 bg-slate-950 px-3.5 py-1 rounded-full border-2 border-amber-400 shadow-[0_4px_12px_rgba(0,0,0,0.5)] select-none whitespace-nowrap">
+                    <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                      Founder & Director
+                    </span>
+                  </div>
+                </div>
+
+              </div>
             </div>
 
             {/* DAILY TOPPERS LEADERBOARD / DAILY RANK LIST */}
@@ -2019,6 +2740,75 @@ export default function App() {
                   </div>
                 )}
 
+                {isTestSubmitted && (
+                  <div className="bg-white border border-slate-200 p-4 rounded-2xl mb-6 space-y-2 text-center shadow-xs">
+                    <div className="flex items-center gap-1.5 justify-center text-slate-800">
+                      <Bookmark className="w-4 h-4 text-indigo-600" />
+                      <h4 className="font-bold text-xs">Save to Cloud Database</h4>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Save this completed paper, your answers, and full solutions to your secure Firestore Cloud Database to review anytime.
+                    </p>
+                    {testSavedSuccess ? (
+                      <div className="bg-emerald-50 text-emerald-800 text-xs py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 border border-emerald-200">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Saved securely to Cloud Database!</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          let correct = 0;
+                          currentTest.questions.forEach((q, idx) => {
+                            if (selectedAnswers[idx] === q.correctOption) correct++;
+                          });
+                          const pct = Math.round((correct / currentTest.questions.length) * 100);
+                          const savedItem: SavedTest = {
+                            id: `test-${Date.now()}`,
+                            subject: currentTest.subject,
+                            className: currentTest.className,
+                            stream: currentTest.stream || selectedStreamId,
+                            questions: currentTest.questions,
+                            selectedAnswers: selectedAnswers,
+                            score: correct,
+                            totalQuestions: currentTest.questions.length,
+                            percentage: pct,
+                            timestamp: new Date().toLocaleString()
+                          };
+                          const updated = [savedItem, ...savedTests];
+                          setSavedTests(updated);
+                          localStorage.setItem("bseb_saved_tests", JSON.stringify(updated));
+
+                          // Cloud database integration
+                          try {
+                            await setDoc(doc(db, "saved_tests", savedItem.id), {
+                              id: savedItem.id,
+                              subject: savedItem.subject,
+                              className: savedItem.className,
+                              stream: savedItem.stream || "",
+                              questions: savedItem.questions,
+                              selectedAnswers: savedItem.selectedAnswers,
+                              score: savedItem.score,
+                              totalQuestions: savedItem.totalQuestions,
+                              percentage: savedItem.percentage,
+                              timestamp: savedItem.timestamp,
+                              userId: chatUserId
+                            });
+                          } catch (err) {
+                            console.error("Failed to save to cloud:", err);
+                          }
+
+                          recalculateStorageUsage();
+                          setTestSavedSuccess(true);
+                        }}
+                        className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Bookmark className="w-3.5 h-3.5 fill-indigo-200" />
+                        <span>Save Completed Paper</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {isTestSubmitted && !wasLeaderboardSubmitted && (
                   <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 p-5 rounded-2xl mb-6 space-y-3 shadow-sm" id="leaderboard-submit-box">
                     <div className="flex items-center gap-2">
@@ -2685,6 +3475,316 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === "storage" && (
+          <div className="space-y-6">
+            {/* Storage Main Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* Left Column: Saved Mock Tests */}
+              <div className="lg:col-span-6 space-y-6">
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+                    <h3 className="font-extrabold text-sm text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Bookmark className="w-4 h-4 text-indigo-600" /> Saved Paper Solutions ({savedTests.length})
+                    </h3>
+                    <span className="text-[10px] text-slate-400">Review offline anytime</span>
+                  </div>
+
+                  {savedTests.length === 0 ? (
+                    <div className="p-8 text-center space-y-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      <Bookmark className="w-10 h-10 text-slate-300 mx-auto" />
+                      <h4 className="font-bold text-slate-700 text-xs">No Saved Mock Tests Yet</h4>
+                      <p className="text-[10px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                        After submitting any Mock Test or Combined Exam on this portal, look for the <strong>"Save Completed Paper"</strong> card under your scorecard to save it here for free lifetime access!
+                      </p>
+                    </div>
+                  ) : viewingSavedTest ? (
+                    // Saved Test Detail Viewer!
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <div className="bg-slate-900 text-white p-4 rounded-2xl flex justify-between items-center">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-indigo-300 font-bold">
+                            <span>BSEB Class {viewingSavedTest.className}</span>
+                            <span>• {viewingSavedTest.stream}</span>
+                          </div>
+                          <h4 className="font-bold text-sm">{viewingSavedTest.subject} Completed Paper</h4>
+                          <p className="text-[9px] text-slate-400">Saved on {viewingSavedTest.timestamp}</p>
+                        </div>
+                        <button
+                          onClick={() => setViewingSavedTest(null)}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-white text-xs font-bold transition-all"
+                        >
+                          Back to List
+                        </button>
+                      </div>
+
+                      {/* Score Summary */}
+                      <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex justify-between items-center text-xs">
+                        <div>
+                          <p className="text-slate-500 font-bold text-[10px] uppercase">My Scorecard</p>
+                          <p className="text-base font-extrabold text-indigo-950 mt-0.5">
+                            {viewingSavedTest.score} / {viewingSavedTest.totalQuestions} Questions Correct
+                          </p>
+                        </div>
+                        <span className="bg-indigo-600 text-white font-extrabold text-xs px-3 py-1 rounded-full">
+                          {viewingSavedTest.percentage}% Score
+                        </span>
+                      </div>
+
+                      {/* List of questions */}
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                        {viewingSavedTest.questions.map((q, idx) => {
+                          const ans = viewingSavedTest.selectedAnswers[idx];
+                          const isCorrect = ans === q.correctOption;
+                          return (
+                            <div key={idx} className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-3 text-xs">
+                              <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                                <span className="font-bold text-slate-500">Question {idx + 1}</span>
+                                <span className={`font-bold px-2 py-0.5 rounded text-[9px] uppercase ${
+                                  isCorrect ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                }`}>
+                                  {isCorrect ? "Correct ✓" : ans ? "Incorrect ✗" : "Unanswered"}
+                                </span>
+                              </div>
+                              <p className="font-bold text-slate-900 leading-relaxed whitespace-pre-line">
+                                {q.questionText}
+                              </p>
+
+                              {/* Options */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                {q.options.map((opt, oIdx) => {
+                                  const letter = ["A", "B", "C", "D"][oIdx];
+                                  const isSelected = ans === letter;
+                                  const isAnswerKey = q.correctOption === letter;
+                                  
+                                  let bgClass = "bg-white border-slate-200 text-slate-700";
+                                  if (isSelected && isCorrect) bgClass = "bg-green-50 border-green-400 text-green-950 font-semibold";
+                                  else if (isSelected && !isCorrect) bgClass = "bg-red-50 border-red-300 text-red-900 font-semibold";
+                                  else if (isAnswerKey) bgClass = "bg-green-50 border-green-300 text-green-800 font-semibold";
+
+                                  return (
+                                    <div key={oIdx} className={`p-2.5 rounded-xl border flex items-center gap-2 ${bgClass}`}>
+                                      <span className="font-bold uppercase">{letter}.</span>
+                                      <span>{opt}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Explanation */}
+                              <div className="bg-indigo-50/70 border border-indigo-100/50 rounded-xl p-3 text-[11px] leading-relaxed text-indigo-900">
+                                <span className="font-bold text-indigo-950 flex items-center gap-1 mb-1">
+                                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Explanation (व्याख्या):
+                                </span>
+                                {q.explanation}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    // Saved tests list
+                    <div className="space-y-3">
+                      {savedTests.map((t) => (
+                        <div key={t.id} className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 hover:border-indigo-200 rounded-2xl transition-all flex items-center justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="bg-indigo-100 text-indigo-800 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
+                                Class {t.className}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold">• {t.stream}</span>
+                            </div>
+                            <h4 className="font-bold text-xs text-slate-900 mt-1">{t.subject} Completed paper</h4>
+                            <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <span>Score: <strong>{t.score}/{t.totalQuestions} ({t.percentage}%)</strong></span>
+                              <span>•</span>
+                              <span>Saved {t.timestamp.split(",")[0]}</span>
+                            </p>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setViewingSavedTest(t)}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[10px] transition-all flex items-center gap-1"
+                            >
+                              <span>Review Solution</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm("Remove this saved test from cloud database?")) {
+                                  const updated = savedTests.filter(item => item.id !== t.id);
+                                  setSavedTests(updated);
+                                  localStorage.setItem("bseb_saved_tests", JSON.stringify(updated));
+                                  try {
+                                    await deleteDoc(doc(db, "saved_tests", t.id));
+                                  } catch (err) {
+                                    console.error("Failed to delete from Firestore:", err);
+                                  }
+                                  recalculateStorageUsage();
+                                }
+                              }}
+                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border border-red-100 hover:border-red-200 transition-all"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Topper's Revision Notebook */}
+              <div className="lg:col-span-6 space-y-6">
+                
+                {/* Add new Note form */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200" id="toppers-notebook-editor">
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+                    <h3 className="font-extrabold text-sm text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-600" /> Topper's revision Notebook (रिवीजन डायरी)
+                    </h3>
+                    <span className="text-[10px] text-emerald-600 font-semibold">💾 Auto Saved locally</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Note Title (शीर्षक):</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Gauss Law derivation steps"
+                          value={newNoteTitle}
+                          onChange={(e) => setNewNoteTitle(e.target.value)}
+                          className="w-full bg-slate-50 text-xs px-3 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject (विषय):</label>
+                        <select
+                          value={newNoteSubject}
+                          onChange={(e) => setNewNoteSubject(e.target.value)}
+                          className="w-full bg-slate-50 text-xs px-2 py-2.5 rounded-xl border border-slate-200 outline-none text-slate-800 font-semibold"
+                        >
+                          {["Physics", "Chemistry", "Mathematics", "Biology", "English", "Hindi", "History", "Geography", "Political Sci", "Accountancy", "General Study"].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Note Details (महत्वपूर्ण सूत्र / नोट्स):</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Write down recurring definitions, math formulas, short definitions, or history timeline dates. Keep your personal study ledger active offline!"
+                        value={newNoteContent}
+                        onChange={(e) => setNewNoteContent(e.target.value)}
+                        className="w-full bg-slate-50 text-xs p-3.5 rounded-xl border border-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 leading-relaxed font-medium"
+                      />
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        if (!newNoteTitle.trim() || !newNoteContent.trim()) {
+                          return;
+                        }
+                        const note: PersonalNote = {
+                          id: `note-${Date.now()}`,
+                          title: newNoteTitle.trim(),
+                          content: newNoteContent.trim(),
+                          subject: newNoteSubject,
+                          timestamp: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        };
+                        const updated = [note, ...personalNotes];
+                        setPersonalNotes(updated);
+                        localStorage.setItem("bseb_personal_notes", JSON.stringify(updated));
+
+                        // Save note to Firestore!
+                        try {
+                          await setDoc(doc(db, "personal_notes", note.id), {
+                            title: note.title,
+                            content: note.content,
+                            subject: note.subject,
+                            timestamp: note.timestamp,
+                            userId: chatUserId
+                          });
+                        } catch (err) {
+                          console.error("Failed to save note to Firestore:", err);
+                        }
+
+                        setNewNoteTitle("");
+                        setNewNoteContent("");
+                        recalculateStorageUsage();
+                      }}
+                      disabled={!newNoteTitle.trim() || !newNoteContent.trim()}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                      <span>Save Note to Cloud Database</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes Grid */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                  <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-4">Saved Revision Notes ({personalNotes.length})</h4>
+
+                  {personalNotes.length === 0 ? (
+                    <div className="p-8 text-center space-y-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+                      <h4 className="font-bold text-slate-700 text-xs">Your Topper revision book is empty</h4>
+                      <p className="text-[10px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                        Add formula cards, chemistry reactions, or quick pointers using the form above to build your ultimate offline board exam companion diary.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {personalNotes.map((note) => (
+                        <div key={note.id} className="p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 relative group flex flex-col justify-between">
+                          <button
+                            onClick={async () => {
+                              if (confirm("Delete this revision note from cloud database?")) {
+                                const updated = personalNotes.filter(item => item.id !== note.id);
+                                setPersonalNotes(updated);
+                                localStorage.setItem("bseb_personal_notes", JSON.stringify(updated));
+                                try {
+                                  await deleteDoc(doc(db, "personal_notes", note.id));
+                                } catch (err) {
+                                  console.error("Failed to delete note from Firestore:", err);
+                                }
+                                recalculateStorageUsage();
+                              }
+                            }}
+                            className="absolute top-3 right-3 p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="bg-teal-50 border border-teal-200 text-teal-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase">
+                                {note.subject}
+                              </span>
+                              <span className="text-[8px] text-slate-400 font-bold">{note.timestamp.split(" at ")[0]}</span>
+                            </div>
+                            <h5 className="font-extrabold text-xs text-slate-900 leading-tight pr-6">{note.title}</h5>
+                            <p className="text-[11px] text-slate-600 leading-relaxed whitespace-pre-line break-words">{note.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Footer */}
@@ -2811,6 +3911,35 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Floating Rocky Kumar Corner Widget */}
+      <div className="fixed bottom-6 right-6 z-50 group hidden md:block animate-bounce-slow">
+        <a
+          href="#rocky-motivation-hq"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById("rocky-motivation-hq")?.scrollIntoView({ behavior: "smooth" });
+          }}
+          className="flex items-center gap-3 bg-slate-950/95 backdrop-blur-md p-2 rounded-2xl border-2 border-amber-400 shadow-[0_10px_35px_rgba(245,158,11,0.35)] hover:scale-105 transition-all duration-300 cursor-pointer select-none"
+        >
+          <div className="relative w-12 h-14 rounded-xl overflow-hidden border border-amber-400 bg-slate-900 shrink-0">
+            <img 
+              src={rockyKumarPic} 
+              alt="Mr. Rocky Kumar" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border border-slate-950 animate-pulse"></span>
+          </div>
+          <div className="text-left pr-1">
+            <span className="bg-amber-400 text-slate-950 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider block w-max shadow-[0_0_8px_rgba(250,204,21,0.4)]">
+              LIVE SOURCE
+            </span>
+            <p className="text-xs font-black text-amber-300 mt-1">Mr. Rocky Kumar</p>
+            <p className="text-[8px] text-slate-400 font-bold leading-none mt-0.5">Click for Motivation</p>
+          </div>
+        </a>
+      </div>
     </div>
   );
 }

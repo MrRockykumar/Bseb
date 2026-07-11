@@ -77,3 +77,25 @@ export interface LeaderboardEntry {
   timestamp: string;
 }
 
+export interface SavedTest {
+  id: string;
+  subject: string;
+  className: string;
+  stream?: string;
+  questions: Question[];
+  selectedAnswers: Record<number, string>;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  timestamp: string;
+}
+
+export interface PersonalNote {
+  id: string;
+  title: string;
+  content: string;
+  subject?: string;
+  timestamp: string;
+}
+
+

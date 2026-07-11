@@ -638,7 +638,7 @@ function getDynamicQuestions(subject: string, className: string, count: number, 
 function generateOfflineTest(className: string, stream: string, subject: string, numQuestions: number, year: string) {
   let questions: any[] = [];
   
-  if (subject === "All Subjects") {
+  if (subject === "All Subjects" || subject === "Daily Quiz Challenge") {
     // Combine questions from multiple subjects of this class
     let availableKeys: string[] = [];
     if (className === "10th") {
@@ -783,7 +783,7 @@ app.post("/api/generate-test", async (req: express.Request, res: express.Respons
     const ai = getGeminiClient();
 
     let searchContextPrompt = "";
-    if (subject === "All Subjects") {
+    if (subject === "All Subjects" || subject === "Daily Quiz Challenge") {
       const subjectList = className === "10th"
         ? "Science (विज्ञान), Mathematics (गणित), Social Science (सामाजिक विज्ञान), Hindi (हिंदी), and English (अंग्रेजी)"
         : stream?.toLowerCase() === "science"
