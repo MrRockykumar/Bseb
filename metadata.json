@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Bihar Board PYQ Mock Test \u0026 Daily Planner",
+  "description": "An interactive web application for Bihar Board Class 10th \u0026 12th (Arts, Science, Commerce) previous year question mock tests, dynamic AI-generated practice sets, and custom daily study planners.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
